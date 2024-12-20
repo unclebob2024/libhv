@@ -337,6 +337,7 @@ public:
     std::string localaddr() {
         if (io_ == NULL) return "";
         struct sockaddr* addr = hio_localaddr(io_);
+        if (!addr) return "";
         char buf[SOCKADDR_STRLEN] = {0};
         return SOCKADDR_STR(addr, buf);
     }
@@ -344,6 +345,7 @@ public:
     std::string peeraddr() {
         if (io_ == NULL) return "";
         struct sockaddr* addr = hio_peeraddr(io_);
+        if (!addr) return "";
         char buf[SOCKADDR_STRLEN] = {0};
         return SOCKADDR_STR(addr, buf);
     }
