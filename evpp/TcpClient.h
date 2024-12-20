@@ -64,24 +64,24 @@ public:
     }
 
     int bind(int local_port, const char* local_host = "0.0.0.0") {
-        sockaddr_u local_addr;
-        memset(&local_addr, 0, sizeof(local_addr));
-        int ret = sockaddr_set_ipport(&local_addr, local_host, local_port);
+        memset(&this->local_addr, 0, sizeof(this->local_addr));
+        int ret = sockaddr_set_ipport(&this->local_addr, local_host, local_port);
         if (ret != 0) {
             return NABS(ret);
         }
-        return bind(&local_addr.sa);
+        this->local_host = local_host;
+        this->local_port = local_port;
+        return bind(&this->local_addr.sa);
     }
 
     int bind(struct sockaddr* local_addr) {
         if (channel == NULL || channel->isClosed()) {
             return -1;
         }
-        int ret = ::bind(channel->fd(), local_addr, SOCKADDR_LEN(local_addr));
-        if (ret != 0) {
-            perror("bind");
+        if (::bind(channel->fd(), local_addr, SOCKADDR_LEN(local_addr)) != 0) {
+            return -errno;
         }
-        return ret;
+        return 0;
     }
 
     // closesocket thread-safe
@@ -102,6 +102,14 @@ public:
             if (connfd < 0) {
                 hloge("createsocket %s:%d return %d!\n", remote_host.c_str(), remote_port, connfd);
                 return connfd;
+            }
+
+            if (is_ipaddr(this->local_host.c_str())) {
+                int ret = bind(&this->local_addr.sa);
+                if (ret != 0) {
+                    hloge("bind '%s:%d' return '%d'!\n", this->local_host.c_str(), this->local_port, -ret);
+                    return ret;
+                }
             }
         }
         if (channel == NULL || channel->status >= SocketChannel::CONNECTING) {
@@ -238,6 +246,9 @@ public:
     std::string             remote_host;
     int                     remote_port;
     sockaddr_u              remote_addr;
+    std::string             local_host{};
+    int                     local_port{};
+    sockaddr_u              local_addr{};
     int                     connect_timeout;
     bool                    tls;
     hssl_ctx_opt_t*         tls_setting;
