@@ -117,7 +117,7 @@ static int hloop_process_pendings(hloop_t* loop) {
         cur = loop->pendings[i];
         while (cur) {
             next = cur->pending_next;
-            if (cur->pending) {
+            if (cur->pending && cur->loop == loop) {
                 if (cur->active && cur->cb) {
                     cur->cb(cur);
                     ++ncbs;
@@ -187,8 +187,10 @@ process_timers:
     //         blocktime, nios, loop->nios, ntimers, loop->ntimers, nidles, loop->nidles,
     //         loop->nactives, npendings, ncbs);
     return ncbs;
+    (void)nios;
 }
 
+#ifdef DEBUG
 static void hloop_stat_timer_cb(htimer_t* timer) {
     hloop_t* loop = timer->loop;
     // hlog_set_level(LOG_LEVEL_DEBUG);
@@ -198,6 +200,7 @@ static void hloop_stat_timer_cb(htimer_t* timer) {
         (unsigned long long)loop->loop_cnt,
         loop->nactives, loop->nios, loop->ntimers, loop->nidles);
 }
+#endif
 
 static void eventfd_read_cb(hio_t* io, void* buf, int readbytes) {
     hloop_t* loop = io->loop;
@@ -872,6 +875,7 @@ int hio_del(hio_t* io, int events) {
         io->loop->nios--;
         // NOTE: not EVENT_DEL, avoid free
         EVENT_INACTIVE(io);
+        EVENT_UNPENDING(io);
     }
     return 0;
 }
@@ -988,16 +992,7 @@ hio_t* hio_create_socket(hloop_t* loop, const char* host, int port, hio_type_e t
     if (sock_type == -1) return NULL;
     sockaddr_u addr;
     memset(&addr, 0, sizeof(addr));
-    int ret = -1;
-#ifdef ENABLE_UDS
-    if (port < 0) {
-        sockaddr_set_path(&addr, host);
-        ret = 0;
-    }
-#endif
-    if (port >= 0) {
-        ret = sockaddr_set_ipport(&addr, host, port);
-    }
+    int ret = sockaddr_set_ipport(&addr, host, port);
     if (ret != 0) {
         // fprintf(stderr, "unknown host: %s\n", host);
         return NULL;
@@ -1033,6 +1028,10 @@ hio_t* hio_create_socket(hloop_t* loop, const char* host, int port, hio_type_e t
     assert(io != NULL);
     io->io_type = type;
     if (side == HIO_SERVER_SIDE) {
+        if (port == 0) {
+            socklen_t addrlen = sizeof(sockaddr_u);
+            getsockname(sockfd, &addr.sa, &addrlen);
+        }
         hio_set_localaddr(io, &addr.sa, sockaddr_len(&addr));
         io->priority = HEVENT_HIGH_PRIORITY;
     } else {

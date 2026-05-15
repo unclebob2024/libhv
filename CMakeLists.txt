@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.6)
+cmake_policy(SET CMP0077 NEW)
 
-project(hv VERSION 1.3.3)
+project(hv VERSION 1.3.4)
 
 option(BUILD_SHARED "build shared library" ON)
 option(BUILD_STATIC "build static library" ON)
@@ -86,6 +87,14 @@ check_function("socketpair" "sys/socket.h")
 check_function("eventfd" "sys/eventfd.h")
 check_function("setproctitle" "unistd.h")
 
+if (NOT HAVE_CLOCK_GETTIME)
+    include(CheckLibraryExists)
+    check_library_exists(rt clock_gettime "" HAVE_CLOCK_GETTIME_IN_RT)
+    if (HAVE_CLOCK_GETTIME_IN_RT)
+        set(HAVE_CLOCK_GETTIME ${HAVE_CLOCK_GETTIME_IN_RT})
+    endif()
+endif()
+
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/hconfig.h.in ${CMAKE_CURRENT_SOURCE_DIR}/hconfig.h)
 
 # see Makefile.in
@@ -169,7 +178,8 @@ if(ANDROID)
     set(LIBS ${LIBS} log)
 elseif(UNIX AND NOT MINGW)
     set(LIBS ${LIBS} pthread m dl)
-    if(CMAKE_COMPILER_IS_GNUCC)
+    find_library(RT_LIBRARY rt)
+    if(RT_LIBRARY)
         set(LIBS ${LIBS} rt)
     endif()
 endif()
@@ -228,6 +238,11 @@ if(WITH_MQTT)
 endif()
 
 list_source_directories(LIBHV_SRCS ${LIBHV_SRCDIRS})
+if(WIN32)
+    set(CMAKE_RC_FLAGS_DEBUG -D_DEBUG)
+    configure_file(${PROJECT_SOURCE_DIR}/${PROJECT_NAME}.rc.in ${CMAKE_BINARY_DIR}/${PROJECT_NAME}.rc)
+    list(APPEND LIBHV_SRCS ${CMAKE_BINARY_DIR}/${PROJECT_NAME}.rc)
+endif()
 
 file(INSTALL ${LIBHV_HEADERS} DESTINATION include/hv)
 file(INSTALL ${LIBHV_HEADERS} DESTINATION ${PROJECT_SOURCE_DIR}/include/hv)
@@ -256,6 +271,10 @@ if(BUILD_STATIC)
         EXPORT libhvConfig
         ARCHIVE DESTINATION lib)
     add_custom_target(libhv_static DEPENDS hv_static)
+endif()
+
+if(WIN32 AND NOT MINGW)
+    install(FILES $<TARGET_PDB_FILE:${PROJECT_NAME}> DESTINATION bin OPTIONAL)
 endif()
 
 install(FILES ${LIBHV_HEADERS} DESTINATION include/hv)

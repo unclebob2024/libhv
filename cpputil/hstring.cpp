@@ -217,11 +217,34 @@ void NetAddr::from_string(const std::string& ipport) {
 }
 
 std::string NetAddr::to_string() {
-    const char* fmt = "%s:%d";
-    if (ip.find(':') != std::string::npos) {
-        fmt = "[%s]:%d";
-    }
-    return hv::asprintf(fmt, ip.c_str(), port);
+    return NetAddr::to_string(ip.c_str(), port);
 }
+
+std::string NetAddr::to_string(const char* ip, int port) {
+    const char* fmt = strchr(ip, ':') ? "[%s]:%d" : "%s:%d";
+    return hv::asprintf(fmt, ip, port);
+}
+
+#ifdef OS_WIN
+std::string wchar_to_string(const UINT codePage, const std::wstring &wstr) {
+  std::string str(4 * wstr.size() + 1, '\0');
+  str.resize(WideCharToMultiByte(
+    codePage, 0,
+    wstr.c_str(), wstr.size(),
+    const_cast<char*>(str.data()), str.size(),
+    NULL, NULL));
+  return str;
+}
+
+std::wstring string_to_wchar(const UINT codePage, const std::string &str) {
+  std::wstring wstr(2 * str.size() + 2, '\0');
+  wstr.resize(MultiByteToWideChar(
+    codePage, 0,
+    str.c_str(), str.size(),
+    const_cast<wchar_t*>(wstr.data()), wstr.size()));
+  return wstr;
+}
+
+#endif // OS_WIN
 
 } // end namespace hv

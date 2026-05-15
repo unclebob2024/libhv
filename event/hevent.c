@@ -43,12 +43,7 @@ static void fill_io_type(hio_t* io) {
 }
 
 static void hio_socket_init(hio_t* io) {
-    if ((io->io_type & HIO_TYPE_SOCK_DGRAM) || (io->io_type & HIO_TYPE_SOCK_RAW)) {
-        // NOTE: sendto multiple peeraddr cannot use io->write_queue
-        blocking(io->fd);
-    } else {
-        nonblocking(io->fd);
-    }
+    nonblocking(io->fd);
     // fill io->localaddr io->peeraddr
     if (io->localaddr == NULL) {
         HV_ALLOC(io->localaddr, sizeof(sockaddr_u));
@@ -428,9 +423,10 @@ void hio_write_cb(hio_t* io, const void* buf, int len) {
 void hio_close_cb(hio_t* io) {
     io->connected = 0;
     io->closed = 1;
-    if (io->close_cb) {
+    hclose_cb close_cb = io->close_cb;
+    if (close_cb) {
         // printd("close_cb------\n");
-        io->close_cb(io);
+        close_cb(io);
         // printd("close_cb======\n");
     }
 }
@@ -601,7 +597,7 @@ static void __write_timeout_cb(htimer_t* timer) {
         if (io->io_type & HIO_TYPE_SOCKET) {
             char localaddrstr[SOCKADDR_STRLEN] = {0};
             char peeraddrstr[SOCKADDR_STRLEN] = {0};
-            hlogw("write timeout [%s] <=> [%s]",
+            hlogi("write timeout [%s] <=> [%s]",
                     SOCKADDR_STR(io->localaddr, localaddrstr),
                     SOCKADDR_STR(io->peeraddr, peeraddrstr));
         }
@@ -849,6 +845,9 @@ void hio_set_unpack(hio_t* io, unpack_setting_t* setting) {
         assert(io->unpack_setting->body_offset >=
                io->unpack_setting->length_field_offset +
                io->unpack_setting->length_field_bytes);
+        if (io->unpack_setting->length_field_coding == 0) {
+            io->unpack_setting->length_field_coding = ENCODE_BY_BIG_ENDIAN;
+        }
     }
 
     // NOTE: unpack must have own readbuf
